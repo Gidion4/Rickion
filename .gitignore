@@ -1,0 +1,15 @@
+# Ignore the entire Vault, it has its own versioning/backup
+/Users/Gidio/Documents/Rickion Systems/MARAGOUTA_NEXUS_VAULT/
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Log and error files
+*.log
+*.err
+
+# Node.js dependencies
+node_modules/

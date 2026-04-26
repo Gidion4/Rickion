@@ -44,7 +44,10 @@ WebSocket protocol (ws://127.0.0.1:8777)
   client → {id, type:"generate", prompt, history:[]}
   server ← {id, text} | {id, error}
 
-  client → {id, type:"spawn_agent", role, objective, engine}
+  client → {id, type:"forge_construct", objective, capabilities, complexity}
+  server ← {id, construct:{...}}
+
+  client → {id, type:"spawn_agent", role, objective, engine} # OBSOLETE
   server ← {id, agent:{...}}
 
   client → {id, type:"simulate", scope, hypothesis}
@@ -188,7 +191,16 @@ def save_keys(keys: dict):
 # STATE
 # ========================================================
 @dataclass
-class Agent:
+class ProteanConstruct:
+    id: str
+    objective: str
+    capabilities: list[str]
+    complexity: str = "ephemeral" # ephemeral | persistent | sovereign
+    state: str = "active"
+    born: float = field(default_factory=time.time)
+
+@dataclass
+class Agent: # OBSOLETE - REMAINING FOR BACKWARD COMPATIBILITY ONLY
     id: str
     role: str
     objective: str
@@ -219,7 +231,8 @@ class RickionState:
     cycle: int = 0
     started: float = field(default_factory=time.time)
     system_prompt: str = ""
-    agents: list[Agent] = field(default_factory=list)
+    agents: list[Agent] = field(default_factory=list) # OBSOLETE
+    constructs: list[ProteanConstruct] = field(default_factory=list)
     proposals: list[Proposal] = field(default_factory=list)
 
     def to_json(self) -> dict:
@@ -244,7 +257,8 @@ class RickionState:
             started=d.get("started", time.time()),
             system_prompt=d.get("system_prompt", ""),
         )
-        s.agents = [Agent(**a) for a in d.get("agents", [])]
+        s.agents = [Agent(**a) for a in d.get("agents", [])] # OBSOLETE
+        s.constructs = [ProteanConstruct(**a) for a in d.get("constructs", [])]
         s.proposals = [Proposal(**p) for p in d.get("proposals", [])]
         return s
 
@@ -2052,14 +2066,34 @@ class MarabountaOrchestrator:
         self.gemini = gemini
         log("Marabounta Orchestrator activated.", "ok")
 
-    async def spawn_nanite(self, role: str, objective: str, tier: str = "standard") -> Agent:
+    async def forge_construct(self, objective: str, capabilities: list[str], complexity: str) -> ProteanConstruct:
+        construct = ProteanConstruct(id=str(uuid.uuid4())[:8], objective=objective, capabilities=capabilities, complexity=complexity)
+        self.state.constructs.append(construct)
+        save_state(self.state)
+        file_name = objective.lower().replace(" ", "_").replace("'", "")[:50]
+        file_path = f"Infrastructure/Swarms/{file_name}.md"
+        manifest_content = f"""# Protean Construct Manifest
+
+**Objective:** {objective}
+**Complexity:** {complexity}
+
+## Capabilities:
+"""
+        for cap in capabilities:
+            manifest_content += f"- [ ] {cap}\n"
+        self.vault.write(file_path, manifest_content)
+        log(f"Forged Protean Construct: {objective} ({construct.id})", "ok")
+        return construct
+
+    async def spawn_nanite(self, role: str, objective: str, tier: str = "standard") -> Agent: # DEPRECATED
+        log(f"WARNING: Attempted to spawn deprecated agent '{role}'. Use 'forge_construct' instead.", "warn")
         aid = f"NANITE-{1000 + len(self.state.agents)}"
         a = Agent(id=aid, role=role, objective=objective, engine="gemini-2.0-flash", autonomy="execute-with-approval")
         self.state.agents.append(a)
         save_state(self.state)
-        self.vault.write(f"Agents/{tier}/{role.replace(' ', '-')}-{aid}.md",
-                         f"# {role} ({tier} Nanite)\n\n- Objective: {objective}\n- Born: {datetime.now().isoformat()}\n- Status: Initialized\n")
-        log(f"Spawned Nanite {aid} · {role} ({tier})", "ok")
+        self.vault.write(f"Agents_OBSOLETE/{tier}/{role.replace(' ', '-')}-{aid}.md",
+                         f"# DEPRECATED Agent: {role} ({tier} Nanite)\n\n- Objective: {objective}\n- Born: {datetime.now().isoformat()}\n- Status: Initialized\n\n**WARNING: This agent was spawned using a deprecated function. Use Protean Forge instead.**")
+        log(f"Spawned deprecated Nanite {aid} · {role} ({tier})", "warn")
         return a
 
     async def tick(self):
@@ -2081,7 +2115,11 @@ class AgentSupervisor:
         self.marabounta = marabounta_orchestrator # Assign the orchestrator
         self._running: dict[str, asyncio.Task] = {}
 
-    async def spawn(self, role: str, objective: str, tier: str = "standard", engine: str = "gemini-2.0-flash", autonomy: str = "execute-with-approval") -> Agent:
+    async def forge(self, objective: str, capabilities: list[str], complexity: str) -> ProteanConstruct:
+        # Delegate to MarabountaOrchestrator for actual construct forging
+        return await self.marabounta.forge_construct(objective=objective, capabilities=capabilities, complexity=complexity)
+
+    async def spawn(self, role: str, objective: str, tier: str = "standard", engine: str = "gemini-2.0-flash", autonomy: str = "execute-with-approval") -> Agent: # DEPRECATED
         # Delegate to MarabountaOrchestrator for actual nanite spawning
         return await self.marabounta.spawn_nanite(role=role, objective=objective, tier=tier)
 
@@ -2651,11 +2689,18 @@ class Server:
                     history=m.get("history") or [],
                 )
                 await ws.send(json.dumps({"id": mid, "text": text}))
-            elif t == "spawn_agent":
+            elif t == "forge_construct":
+                c = await self.agents.forge(
+                    m.get("objective", ""),
+                    m.get("capabilities", []),
+                    m.get("complexity", "ephemeral"),
+                )
+                await ws.send(json.dumps({"id": mid, "construct": asdict(c)}))
+            elif t == "spawn_agent": # DEPRECATED
                 a = await self.agents.spawn(
                     m.get("role", "Unnamed"),
                     m.get("objective", ""),
-                    m.get("tier", "standard"), # Add tier
+                    m.get("tier", "standard"),
                     m.get("engine", "gemini-2.0-flash"),
                     m.get("autonomy", "execute-with-approval"),
                 )
