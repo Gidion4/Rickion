@@ -1,0 +1,52 @@
+{
+    "genesis": {
+        "parent": null,
+        "children": [
+            "action_buy_sol",
+            "action_sell_sol",
+            "hold_and_observe"
+        ],
+        "data": {
+            "action": "SYSTEM_START"
+        },
+        "score": 1.0
+    },
+    "action_buy_sol": {
+        "parent": "genesis",
+        "children": [
+            "buy_more_sol"
+        ],
+        "data": {
+            "action": "BUY",
+            "asset": "SOL"
+        },
+        "score": 0.7
+    },
+    "action_sell_sol": {
+        "parent": "genesis",
+        "children": [],
+        "data": {
+            "action": "SELL",
+            "asset": "SOL"
+        },
+        "score": 0.3
+    },
+    "hold_and_observe": {
+        "parent": "genesis",
+        "children": [],
+        "data": {
+            "action": "HOLD"
+        },
+        "score": 0.9
+    },
+    "buy_more_sol": {
+        "parent": "action_buy_sol",
+        "children": [],
+        "data": {
+            "action": "BUY",
+            "asset": "SOL",
+            "amount": 2
+        },
+        "score": 0.8
+    }
+}
